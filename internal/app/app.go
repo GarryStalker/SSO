@@ -18,6 +18,7 @@ func New(
 ) *App {
 	//TODO: init db
 	//TODO: auth service
+
 	grpcApp := grpcapp.New(log, grpcPort)
 
 	return &App{
