@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"sso/internal/services/auth"
-	"sso/internal/storage"
 
 	ssov1 "github.com/GarryStalker/protos/gen/go/sso"
 	"google.golang.org/grpc"
@@ -34,18 +33,24 @@ func Register(gRPC *grpc.Server, auth Auth) {
 	ssov1.RegisterAuthServer(gRPC, &serverAPI{auth: auth})
 }
 
-const emptyValue = 0
-
 func (s *serverAPI) Login(
 	ctx context.Context,
-	req *ssov1.LoginRequest,
+	in *ssov1.LoginRequest,
 ) (*ssov1.LoginResponse, error) {
 
-	if err := validateLogin(req); err != nil {
-		return nil, err
+	if in.Email == "" {
+		return nil, status.Error(codes.InvalidArgument, "email is required")
 	}
-	// TODO: implement login via auth service
-	token, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), int(req.GetAppId()))
+
+	if in.Password == "" {
+		return nil, status.Error(codes.InvalidArgument, "password is required")
+	}
+
+	if in.GetAppId() == 0 {
+		return nil, status.Error(codes.InvalidArgument, "app_id is required")
+	}
+
+	token, err := s.auth.Login(ctx, in.GetEmail(), in.GetPassword(), int(in.GetAppId()))
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
 			return nil, status.Error(codes.InvalidArgument, "invalid email or password")
@@ -60,15 +65,18 @@ func (s *serverAPI) Login(
 
 func (s *serverAPI) Register(
 	ctx context.Context,
-	req *ssov1.RegisterRequest,
+	in *ssov1.RegisterRequest,
 ) (*ssov1.RegisterResponse, error) {
-	if err := validateRegister(req); err != nil {
-		return nil, err
+	if in.Email == "" {
+		return nil, status.Error(codes.InvalidArgument, "email is required")
+	}
+	if in.Password == "" {
+		return nil, status.Error(codes.InvalidArgument, "password is required")
 	}
 
-	uid, err := s.auth.RegisterNewUser(ctx, req.GetEmail(), req.GetPassword())
+	uid, err := s.auth.RegisterNewUser(ctx, in.GetEmail(), in.GetPassword())
 	if err != nil {
-		if errors.Is(err, storage.ErrUserExists) {
+		if errors.Is(err, auth.ErrUserExists) {
 			return nil, status.Error(codes.AlreadyExists, "user already exists")
 		}
 		return nil, status.Error(codes.Internal, "internal error")
@@ -81,15 +89,15 @@ func (s *serverAPI) Register(
 
 func (s *serverAPI) IsAdmin(
 	ctx context.Context,
-	req *ssov1.IsAdminRequest,
+	in *ssov1.IsAdminRequest,
 ) (*ssov1.IsAdminResponse, error) {
-	if err := validateIsAdmin(req); err != nil {
-		return nil, err
+	if in.UserId == 0 {
+		return nil, status.Error(codes.InvalidArgument, "user_id is required")
 	}
 
-	isAdmin, err := s.auth.IsAdmin(ctx, req.GetUserId())
+	isAdmin, err := s.auth.IsAdmin(ctx, in.GetUserId())
 	if err != nil {
-		if errors.Is(err, storage.ErrUserNotFound) {
+		if errors.Is(err, auth.ErrUserNotFound) {
 			return nil, status.Error(codes.NotFound, "user not found")
 		}
 		return nil, status.Error(codes.Internal, "internal error")
@@ -98,40 +106,4 @@ func (s *serverAPI) IsAdmin(
 	return &ssov1.IsAdminResponse{
 		IsAdmin: isAdmin,
 	}, nil
-}
-
-func validateLogin(req *ssov1.LoginRequest) error {
-	if req.GetEmail() == "" {
-		status.Error(codes.InvalidArgument, "email is required")
-	}
-
-	if req.GetPassword() == "" {
-		status.Error(codes.InvalidArgument, "password is required")
-	}
-
-	if req.GetAppId() == emptyValue {
-		status.Error(codes.InvalidArgument, "app_id is required")
-	}
-
-	return nil
-}
-
-func validateRegister(req *ssov1.RegisterRequest) error {
-	if req.GetEmail() == "" {
-		status.Error(codes.InvalidArgument, "email is required")
-	}
-
-	if req.GetPassword() == "" {
-		status.Error(codes.InvalidArgument, "password is required")
-	}
-
-	return nil
-}
-
-func validateIsAdmin(req *ssov1.IsAdminRequest) error {
-	if req.GetUserId() == emptyValue {
-		status.Error(codes.InvalidArgument, "user_id is required")
-	}
-
-	return nil
 }
