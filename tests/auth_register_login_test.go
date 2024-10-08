@@ -123,6 +123,72 @@ func TestRegister_FailCases(t *testing.T) {
 	}
 }
 
+func TestLogin_FailCases(t *testing.T) {
+	ctx, st := suite.New(t)
+
+	tests := []struct {
+		name        string
+		email       string
+		password    string
+		app_id      int32
+		expectedErr string
+	}{
+		{
+			name:        "With empty email",
+			email:       "",
+			password:    randomPassword(),
+			app_id:      appID,
+			expectedErr: "email is required",
+		},
+		{
+			name:        "With empty password",
+			email:       gofakeit.Email(),
+			password:    "",
+			app_id:      appID,
+			expectedErr: "password is required",
+		},
+		{
+			name:        "With both empty email and password",
+			email:       "",
+			password:    "",
+			app_id:      appID,
+			expectedErr: "email",
+		},
+		{
+			name:        "With Non-Matching Password",
+			email:       gofakeit.Email(),
+			password:    randomPassword(),
+			app_id:      appID,
+			expectedErr: "invalid email or password",
+		},
+		{
+			name:        "With empty app_id",
+			email:       gofakeit.Email(),
+			password:    randomPassword(),
+			app_id:      emptyAppID,
+			expectedErr: "app_id is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := st.AuthClient.Register(ctx, &ssov1.RegisterRequest{
+				Email:    gofakeit.Email(),
+				Password: randomPassword(),
+			})
+			require.NoError(t, err)
+
+			_, err = st.AuthClient.Login(ctx, &ssov1.LoginRequest{
+				Email:    tt.email,
+				Password: tt.password,
+				AppId:    tt.app_id,
+			})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tt.expectedErr)
+		})
+	}
+}
+
 func randomPassword() string {
 	return gofakeit.Password(true, true, true, true, false, passDefaultLen)
 }
